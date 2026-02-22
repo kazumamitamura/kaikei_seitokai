@@ -7,7 +7,9 @@ import {
     CircleDollarSign,
     AlertTriangle,
     ServerCrash,
+    FilePlus2,
 } from "lucide-react";
+import Link from "next/link";
 import SignOutButton from "./sign-out-button";
 
 export default async function DashboardPage() {
@@ -124,7 +126,19 @@ export default async function DashboardPage() {
                                         : "部員"}
                         </p>
                     </div>
-                    <SignOutButton />
+                    <div className="flex items-center gap-3">
+                        <Link
+                            href="/requests/new"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg
+                                bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-medium
+                                hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98]
+                                transition-all shadow-lg shadow-indigo-500/25"
+                        >
+                            <FilePlus2 className="w-4 h-4" />
+                            新規申請
+                        </Link>
+                        <SignOutButton />
+                    </div>
                 </header>
 
                 {/* 残額カード */}
