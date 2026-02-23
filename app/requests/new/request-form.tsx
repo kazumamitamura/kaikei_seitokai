@@ -1,8 +1,9 @@
 "use client";
 
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
-import { Plus, Trash2, Send, Calculator } from "lucide-react";
-import { useState } from "react";
+import { Plus, Trash2, Send, Calculator, Upload, FileText, X, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { submitRequest } from "./actions";
 
 interface ItemRow {
     item_name: string;
@@ -87,7 +88,11 @@ export default function RequestForm({
     defaultApplicant: string;
     defaultJobTitle: string;
 }) {
-    const [submitted, setSubmitted] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -113,12 +118,62 @@ export default function RequestForm({
         name: "items",
     });
 
-    const onSubmit = (data: RequestFormData) => {
-        // フィルター: 品名が入力された行のみ
-        const validItems = data.items.filter((item) => item.item_name.trim() !== "");
-        console.log("📋 申請データ:", { ...data, items: validItems });
-        setSubmitted(true);
-        setTimeout(() => setSubmitted(false), 3000);
+    const onSubmit = async (data: RequestFormData) => {
+        setIsSubmitting(true);
+        setError(null);
+
+        try {
+            const fd = new FormData();
+            fd.append("date", data.date);
+            fd.append("job_title", data.job_title);
+            fd.append("applicant_name", data.applicant_name);
+            fd.append("category", data.category);
+            fd.append("reason", data.reason);
+            fd.append("payee", data.payee);
+            fd.append("items", JSON.stringify(data.items));
+
+            if (receiptFile) {
+                fd.append("receipt", receiptFile);
+            }
+
+            const result = await submitRequest(fd);
+            if (result?.error) {
+                setError(result.error);
+                setIsSubmitting(false);
+            }
+            // redirect happens server-side on success
+        } catch {
+            setError("送信中にエラーが発生しました。もう一度お試しください。");
+            setIsSubmitting(false);
+        }
+    };
+
+    // ── ファイルドロップ処理 ──
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+    const handleDragLeave = () => setIsDragging(false);
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files[0];
+        if (file && isAcceptedFile(file)) {
+            setReceiptFile(file);
+        }
+    };
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) setReceiptFile(file);
+    };
+    const isAcceptedFile = (file: File) => {
+        const accepted = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+        return accepted.includes(file.type);
+    };
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
     // ── 入力フィールド共通スタイル ──
@@ -129,6 +184,23 @@ export default function RequestForm({
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+            {/* ═══ エラー表示 ═══ */}
+            {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-5 py-4 flex items-start gap-3">
+                    <span className="text-red-400 text-lg mt-0.5">⚠</span>
+                    <div>
+                        <p className="text-red-300 text-sm font-medium">{error}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setError(null)}
+                        className="ml-auto text-red-400/60 hover:text-red-300 transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
+
             {/* ═══ 上部: 基本情報 ═══ */}
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
                 <h2 className="text-lg font-semibold text-white mb-5">申請情報</h2>
@@ -199,6 +271,63 @@ export default function RequestForm({
                         />
                     </div>
                 </div>
+            </div>
+
+            {/* ═══ 領収書アップロード ═══ */}
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6">
+                <h2 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
+                    <Upload className="w-5 h-5 text-indigo-400" />
+                    領収書
+                </h2>
+
+                {!receiptFile ? (
+                    <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`relative cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-all
+                            ${isDragging
+                                ? "border-indigo-500 bg-indigo-500/10"
+                                : "border-white/10 hover:border-indigo-500/30 hover:bg-indigo-500/5"
+                            }`}
+                    >
+                        <Upload className={`w-10 h-10 mx-auto mb-3 transition-colors ${isDragging ? "text-indigo-400" : "text-slate-500"}`} />
+                        <p className="text-sm text-slate-400 mb-1">
+                            クリックまたはドラッグ＆ドロップでファイルを選択
+                        </p>
+                        <p className="text-xs text-slate-600">
+                            PDF / JPG / PNG / WebP（任意）
+                        </p>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            onChange={handleFileChange}
+                            className="hidden"
+                        />
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-4 rounded-xl bg-white/[0.03] border border-white/10 p-4">
+                        <div className="p-3 rounded-lg bg-indigo-500/10">
+                            <FileText className="w-6 h-6 text-indigo-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white font-medium truncate">{receiptFile.name}</p>
+                            <p className="text-xs text-slate-500">{formatFileSize(receiptFile.size)}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setReceiptFile(null);
+                                if (fileInputRef.current) fileInputRef.current.value = "";
+                            }}
+                            className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* ═══ 下部: 明細行 ═══ */}
@@ -320,23 +449,27 @@ export default function RequestForm({
                 </a>
                 <button
                     type="submit"
+                    disabled={isSubmitting}
                     className="flex items-center gap-2 px-8 py-3 rounded-xl
             bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-sm
             hover:from-indigo-600 hover:to-purple-700 active:scale-[0.98]
             transition-all duration-200 ease-out
-            shadow-lg shadow-indigo-500/25"
+            shadow-lg shadow-indigo-500/25
+            disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                    <Send className="w-4 h-4" />
-                    申請を送信
+                    {isSubmitting ? (
+                        <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            送信中...
+                        </>
+                    ) : (
+                        <>
+                            <Send className="w-4 h-4" />
+                            申請を送信
+                        </>
+                    )}
                 </button>
             </div>
-
-            {/* 送信成功モック */}
-            {submitted && (
-                <div className="fixed bottom-6 right-6 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 px-6 py-3 rounded-xl text-sm font-medium shadow-2xl animate-[fadeIn_0.3s_ease-out]">
-                    ✅ 申請データがコンソールに出力されました（モック）
-                </div>
-            )}
         </form>
     );
 }
