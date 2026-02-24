@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, X, Loader2, ExternalLink, ChevronDown, Stamp, Eye } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Check, X, Loader2, ExternalLink, ChevronDown, Stamp, Eye, Filter } from "lucide-react";
 import Link from "next/link";
 import { approveAsRole, rejectWithReason } from "./actions";
 import { APPROVAL_ROLES } from "./types";
@@ -14,11 +14,17 @@ interface PendingRequest {
     category: string;
     reason: string;
     total_amount: number;
+    club_id: string;
     club_name: string;
     receipt_url: string | null;
     approval_flow: ApprovalEntry[];
     rejection_reason: string | null;
     status: string;
+}
+
+interface Club {
+    id: string;
+    name: string;
 }
 
 function ApprovalStamps({ flow }: { flow: ApprovalEntry[] }) {
@@ -56,7 +62,8 @@ function ApprovalStamps({ flow }: { flow: ApprovalEntry[] }) {
     );
 }
 
-export default function AdminActions({ requests }: { requests: PendingRequest[] }) {
+export default function AdminActions({ requests, clubs }: { requests: PendingRequest[]; clubs: Club[] }) {
+    const [clubFilter, setClubFilter] = useState("all");
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [processedIds, setProcessedIds] = useState<Record<string, "approved" | "rejected">>({});
     const [error, setError] = useState<string | null>(null);
@@ -119,6 +126,11 @@ export default function AdminActions({ requests }: { requests: PendingRequest[] 
         }
     };
 
+    const filtered = useMemo(() => {
+        if (clubFilter === "all") return requests;
+        return requests.filter((r) => r.club_id === clubFilter);
+    }, [requests, clubFilter]);
+
     if (requests.length === 0) {
         return (
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-10 text-center">
@@ -127,8 +139,50 @@ export default function AdminActions({ requests }: { requests: PendingRequest[] 
         );
     }
 
+    if (filtered.length === 0) {
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-3">
+                    <Filter className="w-4 h-4 text-slate-500" />
+                    <select
+                        value={clubFilter}
+                        onChange={(e) => setClubFilter(e.target.value)}
+                        className="appearance-none px-3 py-2 pr-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer"
+                    >
+                        <option value="all" className="bg-slate-900">全部活動</option>
+                        {clubs.map((c) => (
+                            <option key={c.id} value={c.id} className="bg-slate-900">{c.name}</option>
+                        ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-500 pointer-events-none -ml-6" />
+                </div>
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-10 text-center">
+                    <p className="text-slate-400 text-sm">選択した部活動に承認待ちの申請はありません</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
+            {/* 部活動フィルター */}
+            <div className="flex items-center gap-2 mb-3">
+                <Filter className="w-4 h-4 text-slate-500" />
+                <select
+                    value={clubFilter}
+                    onChange={(e) => setClubFilter(e.target.value)}
+                    className="appearance-none px-3 py-2 pr-8 rounded-lg bg-white/5 border border-white/10 text-white text-sm
+                        focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer"
+                >
+                    <option value="all" className="bg-slate-900">全部活動</option>
+                    {clubs.map((c) => (
+                        <option key={c.id} value={c.id} className="bg-slate-900">{c.name}</option>
+                    ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500 pointer-events-none -ml-6" />
+                <span className="text-xs text-slate-500">{filtered.length} 件</span>
+            </div>
+
             {error && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-5 py-3 flex items-center gap-2">
                     <span className="text-red-400 text-sm">⚠ {error}</span>
@@ -138,7 +192,7 @@ export default function AdminActions({ requests }: { requests: PendingRequest[] 
                 </div>
             )}
 
-            {requests.map((req) => {
+            {filtered.map((req) => {
                 const processed = processedIds[req.id];
                 const isProcessing = processingId === req.id;
                 const isRejecting = rejectingId === req.id;

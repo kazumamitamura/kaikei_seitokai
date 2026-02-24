@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
     Shield,
-    Wallet,
     Clock,
     ArrowLeft,
     Search,
@@ -11,6 +10,7 @@ import {
 import Link from "next/link";
 import AdminActions from "./admin-actions";
 import AdminSearch from "./admin-search";
+import AdminClubCards from "./admin-club-cards";
 
 export default async function AdminPage() {
     const supabase = await createClient();
@@ -139,102 +139,15 @@ export default async function AdminPage() {
                     </p>
                 </header>
 
-                {/* ═══ 部活動別予算一覧 ═══ */}
-                <section className="mb-10">
-                    <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                        <Wallet className="w-5 h-5 text-indigo-400" />
-                        部活動別予算概要
-                    </h2>
-
-                    {(!clubs || clubs.length === 0) ? (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-8 text-center">
-                            <p className="text-slate-400 text-sm">登録されている部活動はありません</p>
-                        </div>
-                    ) : (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="border-b border-white/10">
-                                            <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
-                                                部活動名
-                                            </th>
-                                            <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
-                                                初期予算
-                                            </th>
-                                            <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
-                                                承認済み支出
-                                            </th>
-                                            <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
-                                                残額
-                                            </th>
-                                            <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
-                                                使用率
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {clubs.map((club) => {
-                                            const budget = Number(club.total_budget);
-                                            const spent = spentByClub[club.id] || 0;
-                                            const remaining = budget - spent;
-                                            const pct = budget > 0 ? (spent / budget) * 100 : 0;
-
-                                            return (
-                                                <tr
-                                                    key={club.id}
-                                                    className="hover:bg-white/[0.02] transition-colors"
-                                                >
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-sm font-medium text-white">
-                                                            {club.name}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <span className="text-sm text-slate-300 tabular-nums">
-                                                            {fmt(budget)}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <span className="text-sm text-pink-300 tabular-nums">
-                                                            {fmt(spent)}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <span
-                                                            className={`text-sm font-semibold tabular-nums ${remaining < 0 ? "text-red-400" : "text-emerald-300"
-                                                                }`}
-                                                        >
-                                                            {fmt(remaining)}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <div className="flex items-center justify-end gap-3">
-                                                            <div className="w-20 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                                                <div
-                                                                    className={`h-full rounded-full ${pct > 100
-                                                                        ? "bg-red-500"
-                                                                        : pct > 80
-                                                                            ? "bg-amber-500"
-                                                                            : "bg-indigo-500"
-                                                                        }`}
-                                                                    style={{ width: `${Math.min(pct, 100)}%` }}
-                                                                />
-                                                            </div>
-                                                            <span className="text-xs text-slate-400 tabular-nums w-12 text-right">
-                                                                {pct.toFixed(0)}%
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </section>
+                {/* ═══ 部活動別予算（カード型＋上部検索） ═══ */}
+                <AdminClubCards
+                    clubs={(clubs ?? []).map((c) => ({
+                        id: c.id,
+                        name: c.name,
+                        total_budget: Number(c.total_budget),
+                        spent: spentByClub[c.id] || 0,
+                    }))}
+                />
 
                 {/* ═══ 承認待ち申請一覧 ═══ */}
                 <section>
@@ -248,7 +161,7 @@ export default async function AdminPage() {
                         )}
                     </h2>
 
-                    <AdminActions requests={pendingWithClub} />
+                    <AdminActions requests={pendingWithClub} clubs={(clubs ?? []).map((c) => ({ id: c.id, name: c.name }))} />
                 </section>
 
                 {/* ═══ 全申請横断検索 ═══ */}
