@@ -165,18 +165,16 @@ export default async function DashboardPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        {ksUser.role === "global_admin" && (
-                            <Link
-                                href="/admin"
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg
-                                    bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-medium
-                                    hover:from-amber-600 hover:to-orange-700 active:scale-[0.98]
-                                    transition-all shadow-lg shadow-amber-500/25"
-                            >
-                                <Shield className="w-4 h-4" />
-                                管理画面
-                            </Link>
-                        )}
+                        <Link
+                            href="/admin"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg
+                                bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-medium
+                                hover:from-amber-600 hover:to-orange-700 active:scale-[0.98]
+                                transition-all shadow-lg shadow-amber-500/25"
+                        >
+                            <Shield className="w-4 h-4" />
+                            管理画面
+                        </Link>
                         <Link
                             href="/requests/new"
                             className="flex items-center gap-2 px-4 py-2 rounded-lg
