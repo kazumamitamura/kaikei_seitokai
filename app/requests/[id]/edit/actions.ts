@@ -78,7 +78,7 @@ export async function updateRequestAndResubmit(
         0
     );
 
-    let receiptPath: string | null = undefined;
+    let receiptPath: string | null = null;
     const { data: existingRequest } = await admin
         .from("ks_requests")
         .select("receipt_url")
@@ -132,10 +132,8 @@ export async function updateRequestAndResubmit(
         revision_number: (original.revision_number || 1) + 1,
         approval_flow: [],
         rejection_reason: null,
+        receipt_url: receiptPath,
     };
-    if (receiptPath !== undefined) {
-        updatePayload.receipt_url = receiptPath;
-    }
 
     const { error: updateError } = await admin
         .from("ks_requests")
