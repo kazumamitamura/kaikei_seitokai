@@ -70,8 +70,22 @@ export default async function AdminPage() {
 
     const spentByClub: Record<string, number> = {};
     (allApproved ?? []).forEach((r) => {
-        spentByClub[r.club_id] = (spentByClub[r.club_id] || 0) + Number(r.total_amount);
+        const cid = r?.club_id ?? "";
+        if (cid) {
+            spentByClub[cid] = (spentByClub[cid] ?? 0) + Number(r?.total_amount ?? 0);
+        }
     });
+
+    // 部活動は club_id で一意にし、1部活1カードのみ表示
+    const clubListRaw = (clubs ?? []).map((c) => ({
+        id: c?.id ?? "",
+        name: c?.name ?? "",
+        total_budget: Number(c?.total_budget ?? 0),
+        spent: spentByClub[c?.id ?? ""] ?? 0,
+    })).filter((c) => c.id !== "");
+    const clubList = Array.from(new Map(clubListRaw.map((c) => [c.id, c])).values()).sort((a, b) =>
+        (a.name ?? "").localeCompare(b.name ?? "")
+    );
 
     // ── 4. 決裁待ちの申請を取得 ──
     const { data: pendingRequests } = await admin
@@ -81,10 +95,9 @@ export default async function AdminPage() {
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
-    // club_id → club name マッピング
     const clubMap: Record<string, string> = {};
-    (clubs ?? []).forEach((c) => {
-        clubMap[c.id] = c.name;
+    clubList.forEach((c) => {
+        clubMap[c.id] = c.name ?? "不明";
     });
 
     const pendingWithClub = (pendingRequests ?? []).map((r) => ({
@@ -139,15 +152,8 @@ export default async function AdminPage() {
                     </p>
                 </header>
 
-                {/* ═══ 部活動別予算（カード型＋上部検索） ═══ */}
-                <AdminClubCards
-                    clubs={(clubs ?? []).map((c) => ({
-                        id: c.id,
-                        name: c.name,
-                        total_budget: Number(c.total_budget),
-                        spent: spentByClub[c.id] || 0,
-                    }))}
-                />
+                {/* ═══ 部活動別予算（カード型＋上部検索・1部活1件） ═══ */}
+                <AdminClubCards clubs={clubList} />
 
                 {/* ═══ 承認待ち申請一覧 ═══ */}
                 <section>
@@ -161,7 +167,7 @@ export default async function AdminPage() {
                         )}
                     </h2>
 
-                    <AdminActions requests={pendingWithClub} clubs={(clubs ?? []).map((c) => ({ id: c.id, name: c.name }))} />
+                    <AdminActions requests={pendingWithClub} clubs={clubList.map((c) => ({ id: c.id, name: c.name }))} />
                 </section>
 
                 {/* ═══ 全申請横断検索 ═══ */}
@@ -173,7 +179,7 @@ export default async function AdminPage() {
 
                     <AdminSearch
                         requests={allWithClub}
-                        clubs={(clubs ?? []).map((c) => ({ id: c.id, name: c.name }))}
+                        clubs={clubList.map((c) => ({ id: c.id, name: c.name }))}
                     />
                 </section>
             </div>

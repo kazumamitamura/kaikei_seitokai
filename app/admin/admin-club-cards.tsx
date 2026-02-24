@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { Wallet, Search, ChevronDown } from "lucide-react";
 import Link from "next/link";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 export interface ClubCardData {
     id: string;
@@ -11,11 +12,20 @@ export interface ClubCardData {
     spent: number;
 }
 
-const fmt = new Intl.NumberFormat("ja-JP", {
+interface DonutSlice {
+    name: string;
+    value: number;
+}
+
+const FMT = new Intl.NumberFormat("ja-JP", {
     style: "currency",
     currency: "JPY",
     maximumFractionDigits: 0,
 });
+
+function formatAmount(n: number): string {
+    return FMT.format(n);
+}
 
 export default function AdminClubCards({
     clubs,
@@ -27,8 +37,8 @@ export default function AdminClubCards({
 
     const filtered = useMemo(() => {
         if (!search.trim()) return clubs;
-        const kw = search.toLowerCase();
-        return clubs.filter((c) => c.name.toLowerCase().includes(kw));
+        const kw = (search ?? "").toLowerCase();
+        return clubs.filter((c) => (c?.name ?? "").toLowerCase().includes(kw));
     }, [clubs, search]);
 
     return (
@@ -75,7 +85,7 @@ export default function AdminClubCards({
                                         >
                                             <span className="font-medium">{club.name}</span>
                                             <span className="ml-2 text-xs text-slate-400 tabular-nums">
-                                                {fmt.format(club.spent)} / {fmt.format(club.total_budget)}
+                                                {formatAmount(club?.spent ?? 0)} / {formatAmount(club?.total_budget ?? 0)}
                                             </span>
                                         </Link>
                                     ))
@@ -99,50 +109,89 @@ export default function AdminClubCards({
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {clubs.map((club) => {
-                        const budget = Number(club.total_budget);
-                        const spent = club.spent;
+                        const budget = Number(club?.total_budget ?? 0);
+                        const spent = Number(club?.spent ?? 0);
                         const remaining = budget - spent;
-                        const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
                         const isOver = remaining < 0;
+                        const pctSafe = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+
+                        const donutData: DonutSlice[] =
+                            budget <= 0
+                                ? [{ name: "予算なし", value: 1 }]
+                                : [
+                                      { name: "支出", value: Math.min(spent, budget) },
+                                      { name: "残額", value: Math.max(0, budget - spent) },
+                                  ];
+
+                        const centerSpent = spent;
+                        const centerBudget = budget;
 
                         return (
                             <Link
-                                key={club.id}
-                                href={`/admin/clubs/${club.id}`}
+                                key={club?.id ?? ""}
+                                href={`/admin/clubs/${club?.id ?? ""}`}
                                 className="block bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6
                                     hover:border-indigo-500/30 hover:bg-white/[0.07] transition-all group"
                             >
                                 <h3 className="text-base font-semibold text-white mb-4 truncate group-hover:text-indigo-200 transition-colors">
-                                    {club.name}
+                                    {club?.name ?? ""}
                                 </h3>
-                                <div className="space-y-3 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">初期予算</span>
-                                        <span className="text-slate-300 tabular-nums">{fmt.format(budget)}</span>
+                                <div className="flex flex-col sm:flex-row gap-4 items-center">
+                                    <div className="relative w-full max-w-[160px] h-[160px] flex-shrink-0">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={donutData}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={44}
+                                                    outerRadius={64}
+                                                    paddingAngle={0}
+                                                    isAnimationActive={true}
+                                                >
+                                                    {donutData.map((_, i) => (
+                                                        <Cell
+                                                            key={i}
+                                                            fill={i === 0 ? "#ec4899" : "#334155"}
+                                                            stroke="rgba(255,255,255,0.06)"
+                                                            strokeWidth={1}
+                                                        />
+                                                    ))}
+                                                </Pie>
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                            <span className="text-xs text-slate-400">支出 / 予算</span>
+                                            <span className="text-sm font-bold text-white tabular-nums text-center leading-tight">
+                                                {formatAmount(centerSpent)}
+                                            </span>
+                                            <span className="text-xs text-slate-500">/</span>
+                                            <span className="text-sm font-semibold text-slate-300 tabular-nums text-center">
+                                                {formatAmount(centerBudget)}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">使用額</span>
-                                        <span className="text-pink-300 tabular-nums">{fmt.format(spent)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-400">残額</span>
-                                        <span className={`font-semibold tabular-nums ${isOver ? "text-red-400" : "text-emerald-300"}`}>
-                                            {fmt.format(remaining)}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="mt-4">
-                                    <div className="flex justify-between text-xs text-slate-500 mb-1">
-                                        <span>消化率</span>
-                                        <span>{pct.toFixed(0)}%</span>
-                                    </div>
-                                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full transition-all duration-500 ${
-                                                pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-indigo-500"
-                                            }`}
-                                            style={{ width: `${pct}%` }}
-                                        />
+                                    <div className="flex-1 w-full space-y-3 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">初期予算</span>
+                                            <span className="text-slate-300 tabular-nums">{formatAmount(budget)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">使用額</span>
+                                            <span className="text-pink-300 tabular-nums">{formatAmount(spent)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">残額</span>
+                                            <span className={`font-semibold tabular-nums ${isOver ? "text-red-400" : "text-emerald-300"}`}>
+                                                {formatAmount(remaining)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-xs text-slate-500 pt-1">
+                                            <span>消化率</span>
+                                            <span>{pctSafe.toFixed(0)}%</span>
+                                        </div>
                                     </div>
                                 </div>
                             </Link>
