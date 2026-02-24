@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Edit3, Lock } from "lucide-react";
 import Link from "next/link";
 import PrintButton from "./print-button";
 import { APPROVAL_ROLES } from "../types";
@@ -59,6 +59,18 @@ export default async function RequestDetailPage({
         ? request.approval_flow
         : [];
 
+    // ── 申請者本人か（編集・再提出リンクの表示判定） ──
+    const { data: ksUser } = await admin
+        .from("ks_users")
+        .select("id")
+        .eq("auth_uid", user.id)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+    const isApplicant = ksUser && request.user_id === ksUser.id;
+    const isLocked = request.status === "submitted" || request.status === "approved";
+    const canEditRejected = request.status === "rejected" && isApplicant;
+
     const fmt = (n: number) =>
         new Intl.NumberFormat("ja-JP", {
             style: "currency",
@@ -81,14 +93,31 @@ export default async function RequestDetailPage({
             <div className="relative max-w-4xl mx-auto px-4 py-8 print:max-w-none print:px-0 print:py-0">
                 {/* ═══ 画面用ヘッダー（印刷時非表示） ═══ */}
                 <header className="mb-8 print:hidden">
-                    <div className="flex items-center justify-between">
-                        <Link
-                            href="/admin"
-                            className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
-                        >
-                            <ArrowLeft className="w-4 h-4" />
-                            管理画面に戻る
-                        </Link>
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                            <Link
+                                href="/admin"
+                                className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                                管理画面に戻る
+                            </Link>
+                            {isLocked && (
+                                <span className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-500/10 px-2 py-1 rounded">
+                                    <Lock className="w-3 h-3" />
+                                    編集不可
+                                </span>
+                            )}
+                            {canEditRejected && (
+                                <Link
+                                    href={`/requests/${id}/edit`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 text-sm font-medium hover:bg-amber-500/30 transition-colors"
+                                >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                    編集して再提出
+                                </Link>
+                            )}
+                        </div>
                         <PrintButton />
                     </div>
                 </header>
@@ -269,21 +298,44 @@ export default async function RequestDetailPage({
                         </table>
                     </div>
 
-                    {/* ── 領収書リンク ── */}
+                    {/* ── 領収書（画像埋め込み + 印刷出力） ── */}
                     {signedReceiptUrl && (
                         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-4 mb-6
-                            print:bg-transparent print:border-black/20 print:rounded-none">
-                            <span className="text-xs text-slate-400 print:text-gray-500">領収書</span>
-                            <a
-                                href={signedReceiptUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-1 inline-flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors
-                                    print:text-black print:underline"
-                            >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                領収書ファイルを開く
-                            </a>
+                            print:bg-transparent print:border-black/20 print:rounded-none print:p-2">
+                            <span className="text-xs text-slate-400 print:text-gray-500 block mb-2">領収書</span>
+
+                            {/* 画像形式なら埋め込み表示 */}
+                            {/\.(jpe?g|png|webp|gif|bmp)$/i.test(request.receipt_url || "") ? (
+                                <>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={signedReceiptUrl}
+                                        alt="領収書画像"
+                                        className="receipt-print-img max-w-full max-h-[400px] object-contain rounded-lg border border-white/10
+                                            print:rounded-none print:border-black/20"
+                                    />
+                                    <a
+                                        href={signedReceiptUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="mt-2 inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors print:hidden"
+                                    >
+                                        <ExternalLink className="w-3 h-3" />
+                                        原寸で開く
+                                    </a>
+                                </>
+                            ) : (
+                                <a
+                                    href={signedReceiptUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors
+                                        print:text-black print:underline"
+                                >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    領収書ファイルを開く（PDF）
+                                </a>
+                            )}
                             <p className="text-[10px] text-slate-600 mt-1 print:text-gray-400">
                                 パス: {request.receipt_url}
                             </p>
@@ -319,6 +371,16 @@ export default async function RequestDetailPage({
                             </div>
                         </div>
                     )}
+
+                    {/* ── 改訂番号の強調表示（右下） ── */}
+                    <div className="mt-6 print:mt-4 flex justify-end">
+                        <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 print:bg-gray-100 print:border-gray-300">
+                            <span className="text-xs text-slate-400 print:text-gray-500">改訂</span>
+                            <span className="text-base font-bold text-indigo-300 print:text-black">
+                                第{request.revision_number ?? 1}版（{request.revision_number ?? 1}回目の提出）
+                            </span>
+                        </div>
+                    </div>
 
                     {/* ── 印刷用フッター ── */}
                     <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-xs text-gray-400 text-center">

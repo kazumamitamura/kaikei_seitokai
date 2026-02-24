@@ -24,6 +24,13 @@ export default async function SetupPage() {
 
     if (ksUser) redirect("/dashboard");
 
+    // ── 登録済み部活動一覧（プルダウン用） ──
+    const { data: clubs } = await admin
+        .from("ks_clubs")
+        .select("id, name")
+        .is("deleted_at", null)
+        .order("name");
+
     const displayName =
         user.user_metadata?.full_name || user.email || "ユーザー";
 
@@ -48,11 +55,11 @@ export default async function SetupPage() {
                         <p className="text-sm text-slate-400 mt-2">
                             ようこそ、{displayName} さん！
                             <br />
-                            部活動を登録して予算管理を始めましょう。
+                            部活動を選択するか、新規登録して予算管理を始めましょう。
                         </p>
                     </div>
 
-                    <SetupForm />
+                    <SetupForm clubs={clubs ?? []} />
                 </div>
             </div>
         </div>

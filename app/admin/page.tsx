@@ -93,10 +93,10 @@ export default async function AdminPage() {
         approval_flow: Array.isArray(r.approval_flow) ? r.approval_flow : [],
     }));
 
-    // ── 5. 全申請を取得（横断検索用） ──
+    // ── 5. 全申請を取得（横断検索用・created_at で月検索対応） ──
     const { data: allRequests } = await admin
         .from("ks_requests")
-        .select("id, date, applicant_name, category, reason, total_amount, club_id, receipt_url, approval_flow, rejection_reason, status, revision_number")
+        .select("id, date, applicant_name, category, reason, total_amount, club_id, receipt_url, approval_flow, rejection_reason, status, revision_number, created_at")
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(500);

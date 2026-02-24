@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Filter, Calendar, XCircle, CheckCircle2, Clock, ExternalLink, Edit3, Loader2, X } from "lucide-react";
+import { Search, Filter, Calendar, XCircle, CheckCircle2, Clock, ExternalLink, Edit3, Loader2, X, Lock } from "lucide-react";
 import Link from "next/link";
 import { resubmitRequest } from "./resubmit-action";
 
@@ -15,6 +15,7 @@ interface HistoryItem {
     status: string;
     signedReceiptUrl: string | null;
     revision_number?: number;
+    created_at?: string;
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -33,18 +34,31 @@ const fmt = new Intl.NumberFormat("ja-JP", {
 
 export default function HistoryFilter({ items }: { items: HistoryItem[] }) {
     const [statusFilter, setStatusFilter] = useState("all");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    const [monthFrom, setMonthFrom] = useState("");
+    const [monthTo, setMonthTo] = useState("");
     const [keyword, setKeyword] = useState("");
-    const [resubmittingId, setResubmittingId] = useState<string | null>(null);
-    const [resubmitLoading, setResubmitLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const filtered = useMemo(() => {
         return items.filter((item) => {
+            // ステータスフィルター（全ステータスを正しく扱う）
             if (statusFilter !== "all" && item.status !== statusFilter) return false;
-            if (dateFrom && item.date < dateFrom) return false;
-            if (dateTo && item.date > dateTo) return false;
+
+            // 月フィルター — 記載日(date)または申請日(created_at)のいずれかが範囲内なら表示
+            const itemDateMonth = (item.date || "").toString().substring(0, 7);
+            const itemCreatedMonth = (item.created_at || "").toString().substring(0, 7);
+            if (monthFrom) {
+                const inRangeByDate = itemDateMonth >= monthFrom;
+                const inRangeByCreated = itemCreatedMonth && itemCreatedMonth >= monthFrom;
+                if (!inRangeByDate && !inRangeByCreated) return false;
+            }
+            if (monthTo) {
+                const inRangeByDate = !itemDateMonth || itemDateMonth <= monthTo;
+                const inRangeByCreated = !itemCreatedMonth || itemCreatedMonth <= monthTo;
+                if (!inRangeByDate && !inRangeByCreated) return false;
+            }
+
+            // キーワードフィルター
             if (keyword) {
                 const kw = keyword.toLowerCase();
                 const match =
@@ -55,28 +69,20 @@ export default function HistoryFilter({ items }: { items: HistoryItem[] }) {
             }
             return true;
         });
-    }, [items, statusFilter, dateFrom, dateTo, keyword]);
+    }, [items, statusFilter, monthFrom, monthTo, keyword]);
 
-    const hasFilters = statusFilter !== "all" || dateFrom || dateTo || keyword;
+    const hasFilters = statusFilter !== "all" || monthFrom || monthTo || keyword;
 
     const clearFilters = () => {
         setStatusFilter("all");
-        setDateFrom("");
-        setDateTo("");
+        setMonthFrom("");
+        setMonthTo("");
         setKeyword("");
     };
 
-    const handleResubmit = async (id: string) => {
-        setResubmitLoading(true);
-        setError(null);
-        const fd = new FormData();
-        fd.append("request_id", id);
-        const result = await resubmitRequest(fd);
-        setResubmitLoading(false);
-        if (result?.error) {
-            setError(result.error);
-        }
-    };
+    // 編集可能かどうか（rejected のみ → 編集画面へ遷移）
+    const canEdit = (status: string) => status === "rejected";
+    const isLocked = (status: string) => status === "submitted" || status === "approved";
 
     return (
         <div>
@@ -117,24 +123,24 @@ export default function HistoryFilter({ items }: { items: HistoryItem[] }) {
                         <option value="rejected" className="bg-slate-900">差し戻し</option>
                         <option value="paid" className="bg-slate-900">支払済み</option>
                     </select>
-                    {/* 日付From */}
+                    {/* 年月From */}
                     <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                         <input
-                            type="date"
-                            value={dateFrom}
-                            onChange={(e) => setDateFrom(e.target.value)}
+                            type="month"
+                            value={monthFrom}
+                            onChange={(e) => setMonthFrom(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm
                                 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />
                     </div>
-                    {/* 日付To */}
+                    {/* 年月To */}
                     <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                         <input
-                            type="date"
-                            value={dateTo}
-                            onChange={(e) => setDateTo(e.target.value)}
+                            type="month"
+                            value={monthTo}
+                            onChange={(e) => setMonthTo(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm
                                 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />
@@ -171,6 +177,8 @@ export default function HistoryFilter({ items }: { items: HistoryItem[] }) {
                     {filtered.map((req) => {
                         const sc = statusConfig[req.status] || statusConfig.draft;
                         const rev = req.revision_number || 1;
+                        const locked = isLocked(req.status);
+                        const editable = canEdit(req.status);
 
                         return (
                             <div
@@ -193,6 +201,12 @@ export default function HistoryFilter({ items }: { items: HistoryItem[] }) {
                                         {rev > 1 && (
                                             <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded font-medium">
                                                 第{rev}版
+                                            </span>
+                                        )}
+                                        {locked && (
+                                            <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-600 bg-slate-500/10 px-1.5 py-0.5 rounded">
+                                                <Lock className="w-2.5 h-2.5" />
+                                                ロック
                                             </span>
                                         )}
                                     </div>
@@ -222,44 +236,17 @@ export default function HistoryFilter({ items }: { items: HistoryItem[] }) {
                                             </a>
                                         )}
 
-                                        {/* 差し戻し → 再提出ボタン */}
-                                        {req.status === "rejected" && (
-                                            <>
-                                                {resubmittingId === req.id ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => handleResubmit(req.id)}
-                                                            disabled={resubmitLoading}
-                                                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg
-                                                                bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium
-                                                                hover:bg-indigo-500/20 disabled:opacity-50 transition-all"
-                                                        >
-                                                            {resubmitLoading ? (
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                            ) : (
-                                                                <Edit3 className="w-3 h-3" />
-                                                            )}
-                                                            確定
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setResubmittingId(null)}
-                                                            className="text-xs text-slate-500 hover:text-white transition-colors"
-                                                        >
-                                                            取消
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => setResubmittingId(req.id)}
-                                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg
-                                                            bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium
-                                                            hover:bg-amber-500/20 transition-all"
-                                                    >
-                                                        <Edit3 className="w-3 h-3" />
-                                                        修正・再提出
-                                                    </button>
-                                                )}
-                                            </>
+                                        {/* 差し戻し → 編集画面へ（rejectedのみ表示） */}
+                                        {editable && (
+                                            <Link
+                                                href={`/requests/${req.id}/edit`}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg
+                                                    bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium
+                                                    hover:bg-amber-500/20 transition-all"
+                                            >
+                                                <Edit3 className="w-3 h-3" />
+                                                修正・再提出
+                                            </Link>
                                         )}
 
                                         <Link

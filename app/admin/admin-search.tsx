@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { Search, Filter, Calendar, ChevronDown, Eye, Clock, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import type { ApprovalEntry } from "./types";
-import { APPROVAL_ROLES } from "./types";
 
 interface RequestItem {
     id: string;
@@ -19,6 +18,7 @@ interface RequestItem {
     rejection_reason: string | null;
     status: string;
     revision_number?: number;
+    created_at?: string;
 }
 
 interface Club {
@@ -48,16 +48,29 @@ export default function AdminSearch({
 }) {
     const [clubFilter, setClubFilter] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    const [monthFrom, setMonthFrom] = useState("");
+    const [monthTo, setMonthTo] = useState("");
     const [keyword, setKeyword] = useState("");
 
     const filtered = useMemo(() => {
         return requests.filter((req) => {
             if (clubFilter !== "all" && req.club_name !== clubFilter) return false;
             if (statusFilter !== "all" && req.status !== statusFilter) return false;
-            if (dateFrom && req.date < dateFrom) return false;
-            if (dateTo && req.date > dateTo) return false;
+
+            // 月フィルター — 記載日(date)または申請日(created_at)のいずれかが範囲内なら表示
+            const reqDateMonth = (req.date || "").toString().substring(0, 7);
+            const reqCreatedMonth = (req.created_at || "").toString().substring(0, 7);
+            if (monthFrom) {
+                const inRangeByDate = reqDateMonth >= monthFrom;
+                const inRangeByCreated = reqCreatedMonth && reqCreatedMonth >= monthFrom;
+                if (!inRangeByDate && !inRangeByCreated) return false;
+            }
+            if (monthTo) {
+                const inRangeByDate = !reqDateMonth || reqDateMonth <= monthTo;
+                const inRangeByCreated = !reqCreatedMonth || reqCreatedMonth <= monthTo;
+                if (!inRangeByDate && !inRangeByCreated) return false;
+            }
+
             if (keyword) {
                 const kw = keyword.toLowerCase();
                 const match =
@@ -69,15 +82,15 @@ export default function AdminSearch({
             }
             return true;
         });
-    }, [requests, clubFilter, statusFilter, dateFrom, dateTo, keyword]);
+    }, [requests, clubFilter, statusFilter, monthFrom, monthTo, keyword]);
 
-    const hasFilters = clubFilter !== "all" || statusFilter !== "all" || dateFrom || dateTo || keyword;
+    const hasFilters = clubFilter !== "all" || statusFilter !== "all" || monthFrom || monthTo || keyword;
 
     const clearFilters = () => {
         setClubFilter("all");
         setStatusFilter("all");
-        setDateFrom("");
-        setDateTo("");
+        setMonthFrom("");
+        setMonthTo("");
         setKeyword("");
     };
 
@@ -135,23 +148,24 @@ export default function AdminSearch({
                         <option value="rejected" className="bg-slate-900">差し戻し</option>
                         <option value="paid" className="bg-slate-900">支払済み</option>
                     </select>
-                    {/* 日付 */}
+                    {/* 年月From */}
                     <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                         <input
-                            type="date"
-                            value={dateFrom}
-                            onChange={(e) => setDateFrom(e.target.value)}
+                            type="month"
+                            value={monthFrom}
+                            onChange={(e) => setMonthFrom(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm
                                 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />
                     </div>
+                    {/* 年月To */}
                     <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                         <input
-                            type="date"
-                            value={dateTo}
-                            onChange={(e) => setDateTo(e.target.value)}
+                            type="month"
+                            value={monthTo}
+                            onChange={(e) => setMonthTo(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm
                                 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />

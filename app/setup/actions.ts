@@ -27,20 +27,27 @@ export async function setupClub(
     // ── 2. フォームデータ取得 ──
     const lastName = (formData.get("last_name") as string)?.trim();
     const firstName = (formData.get("first_name") as string)?.trim();
+    const clubSelect = (formData.get("club_select") as string)?.trim();
     const clubName = (formData.get("club_name") as string)?.trim();
     const budgetStr = formData.get("total_budget") as string;
     const totalBudget = parseInt(budgetStr, 10);
     const displayName = `${lastName} ${firstName}`;
-    console.log("📝 3. フォームデータ:", { lastName, firstName, clubName, totalBudget });
+    const isNewClub = clubSelect === "__new__";
+    console.log("📝 3. フォームデータ:", { lastName, firstName, clubSelect, clubName, totalBudget, isNewClub });
 
     if (!lastName || !firstName) {
         return { error: "姓と名を入力してください" };
     }
-    if (!clubName) {
-        return { error: "部活動名を入力してください" };
+    if (!clubSelect) {
+        return { error: "部活動を選択してください" };
     }
-    if (isNaN(totalBudget) || totalBudget < 0) {
-        return { error: "有効な予算額を入力してください" };
+    if (isNewClub) {
+        if (!clubName) {
+            return { error: "部活動名を入力してください" };
+        }
+        if (isNaN(totalBudget) || totalBudget < 0) {
+            return { error: "有効な予算額を入力してください" };
+        }
     }
 
     // ── 3. Admin client (RLS bypass) ──
@@ -74,26 +81,44 @@ export async function setupClub(
         redirect("/dashboard");
     }
 
-    // ── 5. ks_clubs に INSERT ──
-    console.log("📤 5. ks_clubs INSERT 実行...");
-    const { data: club, error: clubError } = await admin
-        .from("ks_clubs")
-        .insert({ name: clubName, total_budget: totalBudget })
-        .select("id")
-        .single();
+    let clubId: string;
 
-    if (clubError || !club) {
-        console.error("❌ ks_clubs INSERT 失敗:", clubError);
-        return { error: `部活動の登録に失敗しました: ${clubError?.message}` };
+    if (isNewClub) {
+        // ── 5a. 新規: ks_clubs に INSERT ──
+        console.log("📤 5. ks_clubs INSERT 実行...");
+        const { data: club, error: clubError } = await admin
+            .from("ks_clubs")
+            .insert({ name: clubName, total_budget: totalBudget })
+            .select("id")
+            .single();
+
+        if (clubError || !club) {
+            console.error("❌ ks_clubs INSERT 失敗:", clubError);
+            return { error: `部活動の登録に失敗しました: ${clubError?.message}` };
+        }
+        console.log("✅ 6. ks_clubs INSERT 成功, club_id:", club.id);
+        clubId = club.id;
+    } else {
+        // ── 5b. 既存: club_id で存在確認 ──
+        const { data: club, error: clubError } = await admin
+            .from("ks_clubs")
+            .select("id")
+            .eq("id", clubSelect)
+            .is("deleted_at", null)
+            .maybeSingle();
+
+        if (clubError || !club) {
+            return { error: "選択した部活動が見つかりません。" };
+        }
+        clubId = club.id;
     }
-    console.log("✅ 6. ks_clubs INSERT 成功, club_id:", club.id);
 
     // ── 6. ks_users に UPSERT（auth_uid で一意性を確保） ──
     console.log("📤 7. ks_users UPSERT 実行...");
     const { error: userError } = await admin.from("ks_users").upsert(
         {
             auth_uid: user.id,
-            club_id: club.id,
+            club_id: clubId,
             display_name: displayName,
             role: "admin",
         },
@@ -102,7 +127,9 @@ export async function setupClub(
 
     if (userError) {
         console.error("❌ ks_users UPSERT 失敗:", userError);
-        await admin.from("ks_clubs").delete().eq("id", club.id);
+        if (isNewClub) {
+            await admin.from("ks_clubs").delete().eq("id", clubId);
+        }
         return { error: `ユーザー登録に失敗しました: ${userError.message}` };
     }
     console.log("✅ 8. ks_users UPSERT 成功");
