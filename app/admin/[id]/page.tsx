@@ -103,6 +103,25 @@ export default async function RequestDetailPage({
                         </h1>
                     </div>
 
+                    {/* ── 画面用タイトル + リビジョン ── */}
+                    <div className="mb-6 print:hidden">
+                        <h1 className="text-xl font-bold text-white flex items-center gap-3">
+                            申請詳細
+                            {(request.revision_number || 1) > 1 && (
+                                <span className="text-sm text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded font-medium">
+                                    第{request.revision_number}版
+                                </span>
+                            )}
+                        </h1>
+                    </div>
+
+                    {/* ── 印刷用リビジョン表示 ── */}
+                    {(request.revision_number || 1) > 1 && (
+                        <div className="hidden print:block text-right text-xs mb-2">
+                            提出回数: 第{request.revision_number}版
+                        </div>
+                    )}
+
                     {/* ── 電子印鑑枠（印刷用 + 画面用） ── */}
                     <div className="mb-8">
                         <h2 className="text-sm font-semibold text-slate-400 mb-3 print:text-black print:text-xs print:mb-2">

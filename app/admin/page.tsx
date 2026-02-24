@@ -6,9 +6,11 @@ import {
     Wallet,
     Clock,
     ArrowLeft,
+    Search,
 } from "lucide-react";
 import Link from "next/link";
 import AdminActions from "./admin-actions";
+import AdminSearch from "./admin-search";
 
 export default async function AdminPage() {
     const supabase = await createClient();
@@ -86,6 +88,20 @@ export default async function AdminPage() {
     });
 
     const pendingWithClub = (pendingRequests ?? []).map((r) => ({
+        ...r,
+        club_name: clubMap[r.club_id] || "不明",
+        approval_flow: Array.isArray(r.approval_flow) ? r.approval_flow : [],
+    }));
+
+    // ── 5. 全申請を取得（横断検索用） ──
+    const { data: allRequests } = await admin
+        .from("ks_requests")
+        .select("id, date, applicant_name, category, reason, total_amount, club_id, receipt_url, approval_flow, rejection_reason, status, revision_number")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+    const allWithClub = (allRequests ?? []).map((r) => ({
         ...r,
         club_name: clubMap[r.club_id] || "不明",
         approval_flow: Array.isArray(r.approval_flow) ? r.approval_flow : [],
@@ -197,10 +213,10 @@ export default async function AdminPage() {
                                                             <div className="w-20 h-1.5 bg-white/5 rounded-full overflow-hidden">
                                                                 <div
                                                                     className={`h-full rounded-full ${pct > 100
-                                                                            ? "bg-red-500"
-                                                                            : pct > 80
-                                                                                ? "bg-amber-500"
-                                                                                : "bg-indigo-500"
+                                                                        ? "bg-red-500"
+                                                                        : pct > 80
+                                                                            ? "bg-amber-500"
+                                                                            : "bg-indigo-500"
                                                                         }`}
                                                                     style={{ width: `${Math.min(pct, 100)}%` }}
                                                                 />
@@ -233,6 +249,19 @@ export default async function AdminPage() {
                     </h2>
 
                     <AdminActions requests={pendingWithClub} />
+                </section>
+
+                {/* ═══ 全申請横断検索 ═══ */}
+                <section className="mt-10">
+                    <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                        <Search className="w-5 h-5 text-indigo-400" />
+                        全申請横断検索
+                    </h2>
+
+                    <AdminSearch
+                        requests={allWithClub}
+                        clubs={(clubs ?? []).map((c) => ({ id: c.id, name: c.name }))}
+                    />
                 </section>
             </div>
         </div>

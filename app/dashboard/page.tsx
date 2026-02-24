@@ -9,13 +9,11 @@ import {
     ServerCrash,
     FilePlus2,
     Clock,
-    CheckCircle2,
-    XCircle,
-    ExternalLink,
     Shield,
 } from "lucide-react";
 import Link from "next/link";
 import SignOutButton from "./sign-out-button";
+import HistoryFilter from "./history-filter";
 
 export default async function DashboardPage() {
     const supabase = await createClient();
@@ -101,11 +99,11 @@ export default async function DashboardPage() {
     // ── 5. 申請履歴を取得 ──
     const { data: requestHistory } = await admin
         .from("ks_requests")
-        .select("id, date, category, reason, applicant_name, total_amount, status, receipt_url, created_at")
+        .select("id, date, category, reason, applicant_name, total_amount, status, receipt_url, revision_number, created_at")
         .eq("club_id", ksUser.club_id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(200);
 
     // 領収書の署名付きURLを生成
     const historyWithUrls = await Promise.all(
@@ -114,7 +112,7 @@ export default async function DashboardPage() {
             if (req.receipt_url) {
                 const { data: signedData } = await admin.storage
                     .from("ks_receipts")
-                    .createSignedUrl(req.receipt_url, 3600); // 1時間有効
+                    .createSignedUrl(req.receipt_url, 3600);
                 signedReceiptUrl = signedData?.signedUrl ?? null;
             }
             return { ...req, signedReceiptUrl };
@@ -129,14 +127,6 @@ export default async function DashboardPage() {
         }).format(n);
 
     const usagePercent = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
-
-    const statusConfig: Record<string, { label: string; icon: typeof Clock; color: string; bg: string }> = {
-        draft: { label: "下書き", icon: Clock, color: "text-slate-400", bg: "bg-slate-500/10" },
-        submitted: { label: "承認待ち", icon: Clock, color: "text-amber-300", bg: "bg-amber-500/10" },
-        approved: { label: "承認済み", icon: CheckCircle2, color: "text-emerald-300", bg: "bg-emerald-500/10" },
-        rejected: { label: "差し戻し", icon: XCircle, color: "text-red-300", bg: "bg-red-500/10" },
-        paid: { label: "支払済み", icon: CheckCircle2, color: "text-blue-300", bg: "bg-blue-500/10" },
-    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
@@ -265,73 +255,14 @@ export default async function DashboardPage() {
                     </div>
                 </div>
 
-                {/* ═══ 申請履歴 ═══ */}
+                {/* ═══ 申請履歴（フィルター付き） ═══ */}
                 <section>
                     <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                         <Clock className="w-5 h-5 text-indigo-400" />
                         申請履歴
                     </h2>
 
-                    {historyWithUrls.length === 0 ? (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-10 text-center">
-                            <p className="text-slate-400 text-sm">
-                                まだ申請がありません。「新規申請」ボタンから最初の申請を作成しましょう。
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {historyWithUrls.map((req) => {
-                                const sc = statusConfig[req.status] || statusConfig.draft;
-                                const StatusIcon = sc.icon;
-
-                                return (
-                                    <div
-                                        key={req.id}
-                                        className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-5 hover:border-white/15 transition-all"
-                                    >
-                                        <div className="flex flex-col md:flex-row md:items-center gap-3">
-                                            {/* ステータスバッジ */}
-                                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${sc.bg} w-fit`}>
-                                                <StatusIcon className={`w-3.5 h-3.5 ${sc.color}`} />
-                                                <span className={`text-xs font-semibold ${sc.color}`}>
-                                                    {sc.label}
-                                                </span>
-                                            </div>
-
-                                            {/* 申請情報 */}
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm text-white font-medium truncate">
-                                                    {req.category || "カテゴリなし"}
-                                                    {req.reason ? ` — ${req.reason}` : ""}
-                                                </p>
-                                                <p className="text-xs text-slate-500 mt-0.5">
-                                                    {req.date} ・ {req.applicant_name}
-                                                </p>
-                                            </div>
-
-                                            {/* 金額 + 領収書リンク */}
-                                            <div className="flex items-center gap-4">
-                                                {req.signedReceiptUrl && (
-                                                    <a
-                                                        href={req.signedReceiptUrl}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                                                    >
-                                                        <ExternalLink className="w-3 h-3" />
-                                                        領収書
-                                                    </a>
-                                                )}
-                                                <p className="text-lg font-bold text-white tabular-nums">
-                                                    {fmt(Number(req.total_amount))}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                    <HistoryFilter items={historyWithUrls} />
                 </section>
             </div>
         </div>
